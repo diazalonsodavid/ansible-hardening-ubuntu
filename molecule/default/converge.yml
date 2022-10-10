@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include hardening_ubuntu"
+      include_role:
+        name: "hardening_ubuntu"

@@ -1,0 +1,182 @@
+---
+- name: Remove Unnecessary packages
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: absent
+    purge: true
+    autoremove: true
+  with_items: "{{ purge_packages }}"
+
+- name: Update apt-get repo and cache
+  ansible.builtin.apt:
+    update_cache: true
+    force_apt_get: true
+
+
+- name: Change grub.cfg ownership, group and permissions
+  ansible.builtin.file:
+    path: /boot/grub/grub.cfg
+    owner: root
+    group: root
+    mode: 'og-rwx'
+  tags: notest
+
+- name: Activate Password for the Bootloader
+  ansible.builtin.blockinfile:
+    path: /etc/grub.d/40_custom
+    state: present
+    block: |
+      set superusers = {{ bootloader_user }}
+      password {{ bootloader_user }} {{ bootloader_passwd }}
+  tags: notest
+
+- name: Apply Grub Changes
+  ansible.builtin.command: update-grub
+  changed_when: false
+  tags: notest
+
+
+- name: Install Apparmor
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+  with_items: "{{ apparmor_packages }}"
+
+- name: Apparmor - Enforce Mode
+  ansible.builtin.shell: aa-enforce /etc/apparmor.d/*
+  changed_when: false
+  tags: notest
+
+- name: Enable And Started Apparmor
+  ansible.builtin.systemd:
+    name: apparmor
+    state: restarted
+    enabled: true
+  tags: notest
+
+- name: Config Network Parameters
+  ansible.builtin.shell: |
+    echo 0 > /proc/sys/net/ipv4/ip_forward
+    echo 0 > /proc/sys/net/ipv4/conf/default/accept_source_route
+    echo 0 > /proc/sys/net/ipv4/conf/default/accept_redirects
+    echo 0 > /proc/sys/net/ipv4/conf/all/secure_redirects
+    echo 1 > /proc/sys/net/ipv4/conf/all/log_martians
+  changed_when: false
+  tags: notest
+
+- name: Disable IPv6
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: 'GRUB_CMDLINE_LINUX_DEFAULT=(.+)$'
+    line: GRUB_CMDLINE_LINUX_DEFAULT="ipv6.disable=1"
+  tags: notest
+
+- name: Apply Grub Changes
+  ansible.builtin.command: update-grub
+  changed_when: false
+  tags: notest
+
+- name: Config sshd_config
+  ansible.builtin.copy:
+    src: ./files/sshd_config
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0700'
+  tags: [notest]
+
+- name: Create cron.allow
+  ansible.builtin.file:
+    path: /etc/cron.allow
+    state: touch
+    owner: root
+    mode: '0600'
+
+- name: Create at.allow
+  ansible.builtin.file:
+    path: /etc/at.allow
+    state: touch
+    owner: root
+    mode: '0600'
+
+- name: Set Umask
+  ansible.builtin.command: "umask 0022"
+  changed_when: false
+  tags: notest
+
+- name: Files Permissions
+  ansible.builtin.file:
+    path: "/etc/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  with_items:
+    - passwd
+    - group
+    - passwd-
+    - group-
+- name: Files Permissions
+  ansible.builtin.file:
+    path: "/etc/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  with_items:
+    - shadow
+    - gshadow
+    - shadow-
+    - gshadow-
+
+- name: Check World Writable files exists
+  ansible.builtin.command: "find / -not -type l -perm -o+w"
+  register: world_writable
+  ignore_errors: true
+  changed_when: false
+
+- name: Output world writable files
+  ansible.builtin.debug:
+    var: world_writable.stdout_lines
+
+- name: Check nouser/nogroup file exists
+  ansible.builtin.shell: find / -nouser -o -nogroup -exec ls {} \;
+  register: check_nouser
+  ignore_errors: true
+  changed_when: false
+
+- name: Output nouser_nogroup files
+  ansible.builtin.debug:
+    var: check_nouser.stdout_lines
+
+- name: Install Auditd Service
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+
+- name: Config Audit.rules
+  ansible.builtin.copy:
+    src: ./files/audit.rules
+    dest: /etc/audit/audit.rules
+    owner: root
+    group: root
+    mode: '0700'
+  tags: notest
+
+- name: Config Audit.conf
+  ansible.builtin.copy:
+    src: ./files/auditd.conf
+    dest: /etc/audit/auditd.conf
+    owner: root
+    group: root
+    mode: '0700'
+  tags: notest
+
+- name: Reload Auditd Service
+  ansible.builtin.systemd:
+    name: auditd
+    state: restarted
+  tags: notest
+
+- name: Install rsyslog Service
+  ansible.builtin.apt:
+    name: rsyslog
+    state: present

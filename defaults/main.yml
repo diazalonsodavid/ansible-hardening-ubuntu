@@ -1,0 +1,23 @@
+---
+# defaults file for hardening_ubuntu
+#
+purge_packages:
+  - netcat-openbsd
+  - telnet
+  - autofs
+  - selinux
+  - selinux-utils
+  - selinux-basics
+  - rsh-client
+  - rsh-redone-client
+  - ypbind
+  - talk
+  - libnss-ldap
+  - libpam-ldap
+  - ldap-utils
+  - update-inetd
+  - inetutils-inetd
+
+apparmor_packages:
+  - apparmor-profiles
+  - apparmor-utils
