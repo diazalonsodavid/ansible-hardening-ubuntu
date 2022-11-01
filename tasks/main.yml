@@ -10,7 +10,7 @@
 - name: Update apt-get repo and cache
   ansible.builtin.apt:
     update_cache: true
-    force_apt_get: true
+    force_apt_get: false
 
 
 - name: Change grub.cfg ownership, group and permissions
@@ -19,15 +19,6 @@
     owner: root
     group: root
     mode: 'og-rwx'
-  tags: notest
-
-- name: Activate Password for the Bootloader
-  ansible.builtin.blockinfile:
-    path: /etc/grub.d/40_custom
-    state: present
-    block: |
-      set superusers = {{ bootloader_user }}
-      password {{ bootloader_user }} {{ bootloader_passwd }}
   tags: notest
 
 - name: Apply Grub Changes
@@ -41,6 +32,18 @@
     name: "{{ item }}"
     state: present
   with_items: "{{ apparmor_packages }}"
+
+- name: Find MariaDB appArmor
+  ansible.builtin.shell: ls /etc/apparmor.d/ | grep usr.sbin.mariadbd
+  register: move_mariadb
+  changed_when: false
+  ignore_errors: true
+  tags: mv
+
+- name: Disable mariadb APPArmor
+  ansible.builtin.shell: mv /etc/apparmor.d/usr.sbin.mariadbd /etc/apparmor.d/disable/usr.sbin.mariadbd
+  when: move_mariadb.rc == 0
+  tags: mv
 
 - name: Apparmor - Enforce Mode
   ansible.builtin.shell: aa-enforce /etc/apparmor.d/*
@@ -76,6 +79,15 @@
   changed_when: false
   tags: notest
 
+- name: Config ssh_config
+  ansible.builtin.copy:
+    src: ./files/ssh_config
+    dest: /etc/ssh/ssh_config
+    owner: root
+    group: root
+    mode: '0700'
+  tags: [notest]
+
 - name: Config sshd_config
   ansible.builtin.copy:
     src: ./files/sshd_config
@@ -100,7 +112,7 @@
     mode: '0600'
 
 - name: Set Umask
-  ansible.builtin.command: "umask 0022"
+  ansible.builtin.command: "umask 0222"
   changed_when: false
   tags: notest
 
